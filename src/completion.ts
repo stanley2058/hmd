@@ -1,7 +1,7 @@
 import type { OpenAPIDocument } from "./spec.ts";
 import { listOperations } from "./spec.ts";
 
-const ROOT = ["api", "cache", "completion", "help", "note"];
+const ROOT = ["api", "cache", "completion", "doctor", "help", "note"];
 const SUBCOMMANDS: Record<string, string[]> = {
   api: ["call", "describe", "operations", "request"],
   cache: ["clear", "status"],
@@ -39,7 +39,10 @@ export function complete(words: string[], document?: OpenAPIDocument): string[] 
   }
 
   if (current.startsWith("-")) {
-    return matching(["--cache", "--fresh", "--help", "--offline", "--verbose"], current);
+    return matching(
+      ["--cache", "--fresh", "--help", "--json", "--json-errors", "--offline", "--verbose"],
+      current,
+    );
   }
   return [];
 }

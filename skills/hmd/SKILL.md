@@ -25,3 +25,5 @@ Use the installed `hmd` binary. Read the nearest command's `--help` when choosin
 Set `HMD_TOKEN` for authenticated operations and `HMD_API_URL` for non-production servers. Set `HMD_WEB_URL` only when it cannot be derived from the API URL.
 
 `note cat` emits Markdown; `note view` emits JSON. `note diff` exits 1 when content differs, which is a comparison result rather than a command failure.
+
+On failure, rerun with `--verbose` to see each cache, public-web, and API attempt. Use the global `--json-errors` flag for stable error codes and structured attempt data. Use `hmd doctor --json` for endpoint, auth, and cache health, and `hmd cache status --json` for cache metrics.

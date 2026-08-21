@@ -124,6 +124,19 @@ hmd cache status --json
 hmd cache clear
 ```
 
+## Diagnostics
+
+Use `--verbose` to print every cache, public-web, and API attempt, including failed attempts and fallbacks. Use the global `--json-errors` flag when an agent needs stable error codes and structured attempt details:
+
+```bash
+hmd note cat URL --fresh --verbose
+hmd --json-errors note cat URL --fresh
+hmd cache status --json
+hmd doctor --json
+```
+
+`hmd doctor` reports the binary version, configured API and web URLs, token presence, live Swagger reachability, authenticated identity when a token is set, and cache writability. It never prints the token. The authenticated check makes one uncached `GET /me` request when a token is configured. HackMD exempts that endpoint from API usage accounting.
+
 ## Shell completion
 
 Every built-in command supports `--help`. Generate a completion script with:

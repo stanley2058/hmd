@@ -7,6 +7,7 @@ describe("completion", () => {
     expect(complete(["a"])).toEqual(["api"]);
     expect(complete(["api", "c"])).toEqual(["call"]);
     expect(complete(["note", "v"])).toEqual(["view"]);
+    expect(complete(["d"])).toEqual(["doctor"]);
     expect(
       complete(["api", "call", "Get"], {
         paths: {

@@ -6,10 +6,11 @@ import { SharedCache } from "./cache.ts";
 import { complete, completionScript, type Shell } from "./completion.ts";
 import { getSwaggerUrl, loadConfig } from "./config.ts";
 import { parseDuration } from "./duration.ts";
+import { Doctor, formatDoctor } from "./doctor.ts";
 import { collect, parseFields } from "./fields.ts";
 import { readInput } from "./input.ts";
 import { Notes } from "./notes.ts";
-import { writeApiResult, writeVerbose } from "./output.ts";
+import { writeApiResult, writeError, writeVerbose } from "./output.ts";
 import { PublicMarkdownReader, type ApiPolicy } from "./public-markdown.ts";
 import {
   findOperation,
@@ -106,6 +107,10 @@ async function main(argv: string[]): Promise<void> {
   const api = new ApiExecutor(config, cache, specs);
   const markdown = new PublicMarkdownReader(config, cache, api);
   const notes = new Notes(config, api, markdown);
+  const doctor = new Doctor(VERSION, config, cache, api);
+  const jsonErrors = argv.includes("--json-errors");
+  const writeResult = (result: Parameters<typeof writeApiResult>[0]) =>
+    writeApiResult(result, { jsonErrors });
 
   if (argv[0] === "__complete") {
     let document;
@@ -129,6 +134,7 @@ async function main(argv: string[]): Promise<void> {
     .name("hmd")
     .description("Dynamic, agent-friendly HackMD CLI")
     .version(VERSION)
+    .option("--json-errors", "emit structured command errors as JSON")
     .showHelpAfterError()
     .addHelpCommand(true);
 
@@ -175,7 +181,7 @@ async function main(argv: string[]): Promise<void> {
       .argument("<operation-id>"),
   ).action(async (operationId: string, flags: RequestFlags) => {
     const result = await api.call(operationId, await executeOptions(flags));
-    writeApiResult(result);
+    writeResult(result);
     writeVerbose(flags.verbose, result);
   });
 
@@ -187,7 +193,7 @@ async function main(argv: string[]): Promise<void> {
       .argument("<path>"),
   ).action(async (method: string, path: string, flags: RequestFlags) => {
     const result = await api.request(method, path, await executeOptions(flags));
-    writeApiResult(result);
+    writeResult(result);
     writeVerbose(flags.verbose, result);
   });
 
@@ -221,7 +227,7 @@ async function main(argv: string[]): Promise<void> {
           ...(flags.offline === undefined ? {} : { offline: flags.offline }),
           ...(flags.team === undefined ? {} : { team: flags.team }),
         });
-        writeApiResult(result);
+        writeResult(result);
         writeVerbose(flags.verbose, result);
       },
     );
@@ -238,7 +244,7 @@ async function main(argv: string[]): Promise<void> {
       ...(flags.fresh === undefined ? {} : { fresh: flags.fresh }),
       ...(flags.offline === undefined ? {} : { offline: flags.offline }),
     });
-    writeApiResult(result);
+    writeResult(result);
     writeVerbose(flags.verbose, result);
   });
 
@@ -300,7 +306,7 @@ async function main(argv: string[]): Promise<void> {
         ...(flags.title === undefined ? {} : { title: flags.title }),
         ...(flags.writePermission === undefined ? {} : { writePermission: flags.writePermission }),
       });
-      writeApiResult(result);
+      writeResult(result);
       writeVerbose(flags.verbose, result);
     },
   );
@@ -350,7 +356,7 @@ async function main(argv: string[]): Promise<void> {
         ...(flags.title === undefined ? {} : { title: flags.title }),
         ...(flags.writePermission === undefined ? {} : { writePermission: flags.writePermission }),
       });
-      writeApiResult(result);
+      writeResult(result);
       writeVerbose(flags.verbose, result);
     },
   );
@@ -371,7 +377,7 @@ async function main(argv: string[]): Promise<void> {
       localContent,
       ...(flags.offline === undefined ? {} : { offline: flags.offline }),
     });
-    writeApiResult(result);
+    writeResult(result);
     writeVerbose(flags.verbose, result);
     if (result.different) process.exitCode = 1;
   });
@@ -384,7 +390,7 @@ async function main(argv: string[]): Promise<void> {
     .option("--verbose", "write transport details to stderr")
     .action(async (reference: string, flags: { verbose?: boolean }) => {
       const result = await notes.delete(reference);
-      writeApiResult(result);
+      writeResult(result);
       writeVerbose(flags.verbose, result);
     });
 
@@ -393,7 +399,7 @@ async function main(argv: string[]): Promise<void> {
     .description("Normalize a note URL or ID without making a network request")
     .argument("<note-or-url>")
     .action((reference: string) => {
-      writeApiResult(notes.resolve(reference));
+      writeResult(notes.resolve(reference));
     });
 
   const cacheCommand = program
@@ -419,6 +425,17 @@ async function main(argv: string[]): Promise<void> {
       }
     });
 
+  program
+    .command("doctor")
+    .description("Check endpoints, credentials, and cache writability")
+    .option("--json", "emit JSON")
+    .action(async (flags: { json?: boolean }) => {
+      const result = await doctor.run();
+      if (flags.json) console.log(JSON.stringify(result, null, 2));
+      else process.stdout.write(formatDoctor(result));
+      if (!result.ok) process.exitCode = 1;
+    });
+
   cacheCommand
     .command("clear")
     .description("Remove hmd cache entries from the shared cache directory")
@@ -441,7 +458,11 @@ async function main(argv: string[]): Promise<void> {
   await program.parseAsync(argv, { from: "user" });
 }
 
-main(process.argv.slice(2)).catch((error: unknown) => {
-  process.stderr.write(`hmd: ${(error as Error).message}\n`);
+const argv = process.argv.slice(2);
+main(argv).catch((error: unknown) => {
+  writeError(error, {
+    json: argv.includes("--json-errors"),
+    verbose: argv.includes("--verbose"),
+  });
   process.exitCode = 1;
 });
