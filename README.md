@@ -160,7 +160,7 @@ The npm package includes a compact agent skill at `skills/hmd/SKILL.md`.
 
 ## Publishing
 
-Pushing a tag such as `v0.1.0` runs the npm publishing workflow. The tag must match the version in `package.json`. The first publish requires a write-capable npm token in the `NPM_TOKEN` repository secret; later releases can use npm trusted publishing configured for `.github/workflows/publish.yml`.
+Pushing a tag such as `v0.1.1` runs the npm publishing workflow. The tag must match the version in `package.json`. The first publish requires a write-capable npm token in the `NPM_TOKEN` repository secret; later releases can use npm trusted publishing configured for `.github/workflows/publish.yml`.
 
 ## License
 

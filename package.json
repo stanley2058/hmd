@@ -1,6 +1,6 @@
 {
   "name": "@stanley2058/hmd",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A dynamic, agent-friendly HackMD CLI",
   "keywords": [
     "agents",
