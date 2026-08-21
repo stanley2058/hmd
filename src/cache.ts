@@ -14,8 +14,14 @@ export interface CacheEntry<T> {
 export interface CacheStats {
   bytes: number;
   entries: number;
-  newestFetchedAt?: string;
-  oldestFetchedAt?: string;
+  newestFetchedAt: string | null;
+  oldestFetchedAt: string | null;
+  root: string;
+}
+
+export interface CacheWriteCheck {
+  error?: string;
+  ok: boolean;
   root: string;
 }
 
@@ -91,6 +97,29 @@ export class SharedCache {
     return removed;
   }
 
+  async checkWritable(): Promise<CacheWriteCheck> {
+    let probe: string | undefined;
+    try {
+      await mkdir(this.root, { recursive: true, mode: 0o700 });
+      probe = join(this.root, `.write-check-${randomUUID()}`);
+      const handle = await open(probe, "wx", 0o600);
+      await handle.close();
+      await unlink(probe);
+      return { ok: true, root: this.root };
+    } catch (error) {
+      if (probe) {
+        try {
+          await unlink(probe);
+        } catch {}
+      }
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        ok: false,
+        root: this.root,
+      };
+    }
+  }
+
   async stats(): Promise<CacheStats> {
     let bytes = 0;
     let entries = 0;
@@ -120,8 +149,8 @@ export class SharedCache {
     return {
       bytes,
       entries,
-      ...(fetchedTimes[0] ? { oldestFetchedAt: fetchedTimes[0] } : {}),
-      ...(fetchedTimes.at(-1) ? { newestFetchedAt: fetchedTimes.at(-1)! } : {}),
+      newestFetchedAt: fetchedTimes.at(-1) || null,
+      oldestFetchedAt: fetchedTimes[0] || null,
       root: this.root,
     };
   }

@@ -38,4 +38,14 @@ describe("SharedCache", () => {
     expect(await cache.clear()).toBe(2);
     expect((await cache.stats()).entries).toBe(0);
   });
+
+  test("checks whether the shared directory is writable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hmd-cache-test-"));
+    roots.push(root);
+
+    expect(await new SharedCache(join(root, "new-cache")).checkWritable()).toEqual({
+      ok: true,
+      root: join(root, "new-cache"),
+    });
+  });
 });
