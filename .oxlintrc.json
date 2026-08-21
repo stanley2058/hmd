@@ -1,0 +1,11 @@
+{
+  "categories": {
+    "correctness": "error",
+    "perf": "warn",
+    "suspicious": "error"
+  },
+  "ignorePatterns": ["dist/**"],
+  "rules": {
+    "no-await-in-loop": "off"
+  }
+}
