@@ -42,8 +42,58 @@ describe("PublicMarkdownReader", () => {
 
     expect(calls).toBe(1);
     expect(initial.source).toBe("public-web");
+    expect(initial.attempts.map(({ result, source }) => ({ result, source }))).toEqual([
+      { result: "miss", source: "cache" },
+      { result: "response", source: "public" },
+    ]);
     expect(repeated.source).toBe("cache");
     expect(Buffer.from(repeated.body).toString()).toBe("# public\n");
+  });
+
+  test("keeps public and API fallback failures in a contextual error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hmd-public-test-"));
+    roots.push(root);
+    const config = testConfig({ cacheDir: root });
+    const fetcher = (async () =>
+      new Response("missing", { status: 404 })) as unknown as typeof fetch;
+    const api = {
+      request: async () => ({
+        attempts: [
+          {
+            method: "GET",
+            result: "response",
+            source: "api",
+            status: 404,
+            url: "https://api.example.test/v1/notes/missing",
+          },
+        ],
+        body: Buffer.from("missing"),
+        headers: new Headers(),
+        source: "api",
+        status: 404,
+      }),
+    } as unknown as ApiExecutor;
+    const reader = new PublicMarkdownReader(config, new SharedCache(root), api, fetcher);
+
+    try {
+      await reader.read("missing", { api: "auto", cacheMs: 300_000, fresh: true });
+      throw new Error("expected note read to fail");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "NOTE_NOT_FOUND",
+        message: 'Note "missing" could not be read.',
+        note: "missing",
+        status: 404,
+      });
+      expect(
+        (error as { attempts: { label?: string; source: string; status?: number }[] }).attempts,
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ source: "public", status: 404 }),
+          expect.objectContaining({ label: "api fallback", source: "api", status: 404 }),
+        ]),
+      );
+    }
   });
 
   test("rejects HTML success responses from free-URL handling", async () => {

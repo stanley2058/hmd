@@ -39,7 +39,7 @@ describe("ApiExecutor", () => {
       }
       apiCalls += 1;
       return Response.json({ content: "# cached" });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const firstCache = new SharedCache(root);
     const first = new ApiExecutor(
@@ -66,8 +66,37 @@ describe("ApiExecutor", () => {
     expect(swaggerCalls).toBe(1);
     expect(apiCalls).toBe(1);
     expect(initial.source).toBe("api");
+    expect(initial.attempts.map(({ result, source }) => ({ result, source }))).toEqual([
+      { result: "miss", source: "cache" },
+      { result: "response", source: "api" },
+    ]);
     expect(repeated.source).toBe("cache");
+    expect(repeated.attempts[0]?.result).toBe("hit");
     expect(Buffer.from(repeated.body).toString()).toContain("cached");
+  });
+
+  test("reports cache and network attempts when a request cannot connect", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hmd-api-test-"));
+    roots.push(root);
+    const config = testConfig({ cacheDir: root });
+    const fetcher = (async () => {
+      throw new TypeError("connection refused");
+    }) as unknown as typeof fetch;
+    const shared = new SharedCache(root);
+    const api = new ApiExecutor(config, shared, new SpecStore(config, shared, fetcher), fetcher);
+
+    try {
+      await api.request("GET", "/notes/abc", { cacheMs: 300_000 });
+      throw new Error("expected request to fail");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "NETWORK_ERROR",
+        attempts: [
+          { result: "miss", source: "cache" },
+          { detail: "connection refused", result: "error", source: "api" },
+        ],
+      });
+    }
   });
 
   test("constructs multipart requests described by Swagger", async () => {

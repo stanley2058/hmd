@@ -4,8 +4,10 @@ import type { ApiExecutor, ApiResult } from "./api.ts";
 import type { Config } from "./config.ts";
 import type { ApiPolicy, MarkdownOptions, PublicMarkdownReader } from "./public-markdown.ts";
 import { resolveNoteReference } from "./note-reference.ts";
+import type { TransportAttempt } from "./diagnostics.ts";
 
 export interface NoteResult {
+  attempts?: TransportAttempt[];
   body: Uint8Array;
   different?: boolean;
   fetchedAt?: string;
@@ -63,6 +65,7 @@ function jsonBody(value: unknown): Uint8Array {
 
 function withUrl(result: ApiResult, url: string): NoteResult {
   return {
+    attempts: result.attempts,
     body: result.body,
     ...(result.fetchedAt ? { fetchedAt: result.fetchedAt } : {}),
     source: result.source,
@@ -123,6 +126,7 @@ export class Notes {
           _hmd: hmd,
         };
     return {
+      attempts: result.attempts,
       body: jsonBody(value),
       ...(result.fetchedAt ? { fetchedAt: result.fetchedAt } : {}),
       source: result.source,
@@ -151,6 +155,7 @@ export class Notes {
 
   async update(reference: string, options: UpdateNoteOptions): Promise<NoteResult> {
     const resolved = resolveNoteReference(this.config, reference);
+    const attempts: TransportAttempt[] = [];
     const body: Record<string, unknown> = {
       ...(options.content === undefined ? {} : { content: options.content }),
       ...(options.description === undefined ? {} : { description: options.description }),
@@ -171,12 +176,19 @@ export class Notes {
           api: "never",
           cacheMs: options.cacheMs,
         });
+        if (current.attempts) attempts.push(...current.attempts);
         if (Buffer.from(current.body).toString("utf8") === body.content) delete body.content;
-      } catch {}
+      } catch (error) {
+        if (error && typeof error === "object" && "attempts" in error) {
+          const failedAttempts = (error as { attempts?: TransportAttempt[] }).attempts;
+          if (failedAttempts) attempts.push(...failedAttempts);
+        }
+      }
     }
 
     if (Object.keys(body).length === 0) {
       return {
+        attempts,
         body: jsonBody({ updated: false, reason: "content is unchanged" }),
         source: "local",
         status: 200,
@@ -190,7 +202,9 @@ export class Notes {
       headers: ["Content-Type: application/json"],
       input: jsonBody(body),
     });
-    return withUrl(result, `${this.config.apiUrl}${path}`);
+    const response = withUrl(result, `${this.config.apiUrl}${path}`);
+    response.attempts = [...attempts, ...(result.attempts || [])];
+    return response;
   }
 
   async delete(reference: string): Promise<NoteResult> {
@@ -219,6 +233,7 @@ export class Notes {
         )
       : "";
     return {
+      attempts: remote.attempts,
       body: Buffer.from(patch),
       different,
       ...(remote.fetchedAt ? { fetchedAt: remote.fetchedAt } : {}),

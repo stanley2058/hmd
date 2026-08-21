@@ -5,6 +5,7 @@ import { SharedCache } from "./cache.ts";
 import { fieldValueAsString, isFileFieldValue, type Field } from "./fields.ts";
 import type { HttpMethod, OpenAPISchema, Operation } from "./spec.ts";
 import { findOperation, SpecStore } from "./spec.ts";
+import { HmdError, type TransportAttempt } from "./diagnostics.ts";
 
 interface CachedResponse {
   body: string;
@@ -22,6 +23,7 @@ export interface ExecuteOptions {
 }
 
 export interface ApiResult {
+  attempts: TransportAttempt[];
   body: Uint8Array;
   fetchedAt?: string;
   headers: Headers;
@@ -57,8 +59,13 @@ function contentTypeFor(operation: Operation): string | undefined {
   return Object.keys(operation.operation.requestBody?.content || {})[0];
 }
 
-function responseFromCache(value: CachedResponse, fetchedAt: string): ApiResult {
+function responseFromCache(
+  value: CachedResponse,
+  fetchedAt: string,
+  attempts: TransportAttempt[],
+): ApiResult {
   return {
+    attempts,
     body: Buffer.from(value.body, "base64"),
     fetchedAt,
     headers: new Headers(value.headers),
@@ -82,7 +89,11 @@ export class ApiExecutor {
       document = await this.specs.load({ force: true });
       operation = findOperation(document, operationId);
     }
-    if (!operation) throw new Error(`Unknown operationId "${operationId}".`);
+    if (!operation) {
+      throw new HmdError("UNKNOWN_OPERATION", `Unknown operationId "${operationId}".`, {
+        details: { operationId },
+      });
+    }
     return this.executeOperation(operation, options);
   }
 
@@ -229,21 +240,78 @@ export class ApiExecutor {
     });
     const cached =
       method === "GET" ? await this.cache.read<CachedResponse>("responses", key) : undefined;
+    const cacheAttempt: TransportAttempt | undefined =
+      method === "GET"
+        ? {
+            ...(cached?.fetchedAt ? { fetchedAt: cached.fetchedAt } : {}),
+            method,
+            result:
+              cached && options.fresh
+                ? "bypass"
+                : cached
+                  ? this.cache.isFresh(cached, options.cacheMs)
+                    ? "hit"
+                    : "stale"
+                  : "miss",
+            source: "cache",
+            url: url.toString(),
+            ...(cached && options.fresh ? { detail: "ignored by --fresh" } : {}),
+          }
+        : undefined;
+    const attempts = cacheAttempt ? [cacheAttempt] : [];
     if (!options.fresh && cached && this.cache.isFresh(cached, options.cacheMs)) {
-      return responseFromCache(cached.value, cached.fetchedAt);
+      return responseFromCache(cached.value, cached.fetchedAt, attempts);
     }
     if (options.offline) {
-      if (cached) return responseFromCache(cached.value, cached.fetchedAt);
-      throw new Error(`No cached response for ${method} ${url}.`);
+      if (cached) return responseFromCache(cached.value, cached.fetchedAt, attempts);
+      throw new HmdError("CACHE_MISS", `No cached response for ${method} ${url}.`, { attempts });
     }
 
-    const response = await this.fetcher(url, {
-      ...(requestBody ? { body: requestBody } : {}),
-      headers,
+    let response: Response;
+    try {
+      response = await this.fetcher(url, {
+        ...(requestBody ? { body: requestBody } : {}),
+        headers,
+        method,
+      });
+    } catch (error) {
+      const attempt: TransportAttempt = {
+        detail: error instanceof Error ? error.message : String(error),
+        method,
+        result: "error",
+        source: "api",
+        url: url.toString(),
+      };
+      throw new HmdError("NETWORK_ERROR", `Could not reach ${url.origin}.`, {
+        attempts: [...attempts, attempt],
+        cause: error,
+      });
+    }
+    attempts.push({
       method,
+      result: "response",
+      source: "api",
+      status: response.status,
+      url: url.toString(),
     });
-    const responseBody = new Uint8Array(await response.arrayBuffer());
+    let responseBody: Uint8Array;
+    try {
+      responseBody = new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      attempts.push({
+        detail: error instanceof Error ? error.message : String(error),
+        method,
+        result: "error",
+        source: "api",
+        url: url.toString(),
+      });
+      throw new HmdError("NETWORK_ERROR", `Could not read the response from ${url.origin}.`, {
+        attempts,
+        cause: error,
+      });
+    }
     const result: ApiResult = {
+      attempts,
       body: responseBody,
       headers: response.headers,
       source: "api",
