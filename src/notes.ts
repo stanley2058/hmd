@@ -1,3 +1,4 @@
+import { noteApiPath } from "./note-api-target.ts";
 import { createTwoFilesPatch } from "diff";
 
 import type { ApiExecutor, ApiResult } from "./api.ts";
@@ -27,6 +28,7 @@ export interface ListNoteOptions extends CachedRequestOptions {
 }
 
 export interface ViewNoteOptions extends CachedRequestOptions {
+  team?: string;
   api: ApiPolicy;
 }
 
@@ -39,6 +41,7 @@ export interface CreateNoteOptions {
 }
 
 export interface UpdateNoteOptions {
+  team?: string;
   cacheMs: number;
   content?: string;
   description?: string;
@@ -107,6 +110,7 @@ export class Notes {
     const resolved = resolveNoteReference(this.config, reference);
     const result = await this.markdown.read(reference, {
       api: options.api,
+      ...(options.team === undefined ? {} : { team: options.team }),
       cacheMs: options.cacheMs,
       ...(options.fresh === undefined ? {} : { fresh: options.fresh }),
       meta: true,
@@ -196,7 +200,7 @@ export class Notes {
       };
     }
 
-    const path = `/notes/${encodeURIComponent(resolved.apiReference)}`;
+    const path = noteApiPath(resolved, options.team);
     const result = await this.api.request("PATCH", path, {
       cacheMs: 0,
       headers: ["Content-Type: application/json"],
@@ -207,9 +211,9 @@ export class Notes {
     return response;
   }
 
-  async delete(reference: string): Promise<NoteResult> {
+  async delete(reference: string, options: { team?: string } = {}): Promise<NoteResult> {
     const resolved = resolveNoteReference(this.config, reference);
-    const path = `/notes/${encodeURIComponent(resolved.apiReference)}`;
+    const path = noteApiPath(resolved, options.team);
     const result = await this.api.request("DELETE", path, { cacheMs: 0 });
     return withUrl(result, `${this.config.apiUrl}${path}`);
   }
@@ -218,6 +222,7 @@ export class Notes {
     const resolved = resolveNoteReference(this.config, reference);
     const remote = await this.markdown.read(reference, {
       api: options.api,
+      ...(options.team === undefined ? {} : { team: options.team }),
       cacheMs: options.cacheMs,
       ...(options.fresh === undefined ? {} : { fresh: options.fresh }),
       ...(options.offline === undefined ? {} : { offline: options.offline }),

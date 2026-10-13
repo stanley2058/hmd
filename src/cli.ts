@@ -20,7 +20,7 @@ import {
   SpecStore,
 } from "./spec.ts";
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 
 interface RequestFlags {
   cache: string;
@@ -34,6 +34,7 @@ interface RequestFlags {
 }
 
 interface ReadFlags {
+  team?: string;
   api: ApiPolicy;
   cache: string;
   fresh?: boolean;
@@ -89,6 +90,7 @@ function addContentOptions(command: Command): Command {
 
 function addNoteReadOptions(command: Command): Command {
   return command
+    .option("--team <path>", "use this team API workspace")
     .addOption(
       new Option("--api <policy>", "API fallback policy")
         .choices(["always", "auto", "never"])
@@ -240,6 +242,7 @@ async function main(argv: string[]): Promise<void> {
   ).action(async (reference: string, flags: ReadFlags) => {
     const result = await notes.view(reference, {
       api: flags.api,
+      ...(flags.team === undefined ? {} : { team: flags.team }),
       cacheMs: parseDuration(flags.cache),
       ...(flags.fresh === undefined ? {} : { fresh: flags.fresh }),
       ...(flags.offline === undefined ? {} : { offline: flags.offline }),
@@ -262,12 +265,14 @@ async function main(argv: string[]): Promise<void> {
         cache: string;
         fresh?: boolean;
         meta?: boolean;
+        team?: string;
         offline?: boolean;
         verbose?: boolean;
       },
     ) => {
       const result = await markdown.read(reference, {
         api: flags.api,
+        ...(flags.team === undefined ? {} : { team: flags.team }),
         cacheMs: parseDuration(flags.cache),
         ...(flags.fresh === undefined ? {} : { fresh: flags.fresh }),
         ...(flags.meta === undefined ? {} : { meta: flags.meta }),
@@ -317,6 +322,7 @@ async function main(argv: string[]): Promise<void> {
       .alias("edit")
       .description("Update a note; unchanged public content does not issue a PATCH")
       .argument("<note-or-url>")
+      .option("--team <path>", "use this team API workspace")
       .option("--title <title>", "note title")
       .option("--description <description>", "note description")
       .option("--tag <tag>", "replace note tags; repeatable", collect, [])
@@ -332,6 +338,7 @@ async function main(argv: string[]): Promise<void> {
       reference: string,
       flags: ContentFlags & {
         cache: string;
+        team?: string;
         description?: string;
         force?: boolean;
         parentFolder?: string;
@@ -345,6 +352,7 @@ async function main(argv: string[]): Promise<void> {
     ) => {
       const content = await optionalContent(flags);
       const result = await notes.update(reference, {
+        ...(flags.team === undefined ? {} : { team: flags.team }),
         cacheMs: parseDuration(flags.cache),
         ...(content === undefined ? {} : { content }),
         ...(flags.description === undefined ? {} : { description: flags.description }),
@@ -371,6 +379,7 @@ async function main(argv: string[]): Promise<void> {
     const localContent = Buffer.from(await readInput(file)).toString("utf8");
     const result = await notes.diff(reference, {
       api: flags.api,
+      ...(flags.team === undefined ? {} : { team: flags.team }),
       cacheMs: parseDuration(flags.cache),
       filename: file === "-" ? "stdin" : basename(file),
       ...(flags.fresh === undefined ? {} : { fresh: flags.fresh }),
@@ -388,8 +397,12 @@ async function main(argv: string[]): Promise<void> {
     .description("Move a personal or accessible team note to trash")
     .argument("<note-or-url>")
     .option("--verbose", "write transport details to stderr")
-    .action(async (reference: string, flags: { verbose?: boolean }) => {
-      const result = await notes.delete(reference);
+    .option("--team <path>", "use this team API workspace")
+    .action(async (reference: string, flags: { verbose?: boolean; team?: string }) => {
+      const result = await notes.delete(
+        reference,
+        flags.team === undefined ? {} : { team: flags.team },
+      );
       writeResult(result);
       writeVerbose(flags.verbose, result);
     });

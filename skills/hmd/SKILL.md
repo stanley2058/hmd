@@ -10,6 +10,8 @@ Use the installed `hmd` binary. Read the nearest command's `--help` when choosin
 ## Routing
 
 - Prefer `hmd note` for common note workflows. It owns URL normalization, cache use, public reads, and personal/team routing.
+- Pass the complete note URL, including `@workspace/permalink`, to `note view`, `cat`, `diff`, `update` (`edit`), or `delete` (`rm`). The API resolves it within the operation; no team or note-list lookup is needed.
+- These commands default to `/notes`, which accepts personal and accessible team notes and charges personal API quota. Add `--team <path>` when the team workspace is known and team quota should be used. The namespace in `@name/note` can belong to a user or a team.
 - Use `hmd api --help` for operations outside that surface. Pass its live operation ID to `hmd api call`; use `hmd api describe <operation-id>` when parameters are unclear.
 
 ## Quota

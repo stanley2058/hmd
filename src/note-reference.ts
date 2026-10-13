@@ -4,6 +4,7 @@ export interface NoteReference {
   apiReference: string;
   input: string;
   markdownUrl: string;
+  namespace?: string;
   webUrl: string;
 }
 
@@ -36,8 +37,15 @@ export function resolveNoteReference(config: Config, reference: string): NoteRef
   const lastSegment = web.pathname.split("/").findLast(Boolean);
   if (!lastSegment) throw new Error(`Cannot extract a note reference from ${reference}.`);
 
+  const segments = web.pathname.split("/").filter(Boolean);
+  const namespace =
+    segments.length === 2 && segments[0]!.startsWith("@")
+      ? decodeURIComponent(segments[0]!.slice(1))
+      : undefined;
+
   return {
-    apiReference: decodeURIComponent(lastSegment),
+    ...(namespace ? { namespace } : {}),
+    apiReference: segments.length === 1 ? decodeURIComponent(lastSegment) : web.toString(),
     input: reference,
     markdownUrl: markdown.toString(),
     webUrl: web.toString(),

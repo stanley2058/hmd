@@ -13,14 +13,16 @@ describe("resolveNoteReference", () => {
       webUrl: "https://example.test/abc",
     });
     expect(resolveNoteReference(config, "https://example.test/@uid/named-note")).toMatchObject({
-      apiReference: "named-note",
+      namespace: "uid",
+      apiReference: "https://example.test/@uid/named-note",
       markdownUrl: "https://example.test/@uid/named-note.md?no-meta=",
       webUrl: "https://example.test/@uid/named-note",
     });
     expect(
       resolveNoteReference(config, "https://example.test/@uid/named-note.md?no-meta"),
     ).toMatchObject({
-      apiReference: "named-note",
+      namespace: "uid",
+      apiReference: "https://example.test/@uid/named-note",
       webUrl: "https://example.test/@uid/named-note",
     });
   });

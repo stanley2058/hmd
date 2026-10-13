@@ -1,3 +1,4 @@
+import { noteApiPath } from "./note-api-target.ts";
 import type { Config } from "./config.ts";
 import { SharedCache } from "./cache.ts";
 import type { ApiExecutor } from "./api.ts";
@@ -17,6 +18,7 @@ export interface MarkdownOptions {
   cacheMs: number;
   fresh?: boolean;
   meta?: boolean;
+  team?: string;
   offline?: boolean;
 }
 
@@ -65,7 +67,8 @@ export class PublicMarkdownReader {
   ) {}
 
   async read(reference: string, options: MarkdownOptions): Promise<MarkdownResult> {
-    const noteId = resolveNoteReference(this.config, reference).apiReference;
+    const resolved = resolveNoteReference(this.config, reference);
+    const noteId = resolved.apiReference;
     let attempts: TransportAttempt[] = [];
     if (options.api !== "always") {
       const publicRead = await this.readPublic(reference, options);
@@ -88,8 +91,9 @@ export class PublicMarkdownReader {
     }
 
     let result;
+    const path = noteApiPath(resolved, options.team);
     try {
-      result = await this.api.request("GET", `/notes/${encodeURIComponent(noteId)}`, {
+      result = await this.api.request("GET", path, {
         cacheMs: options.cacheMs,
         ...(options.fresh === undefined ? {} : { fresh: options.fresh }),
         ...(options.offline === undefined ? {} : { offline: options.offline }),
@@ -143,7 +147,7 @@ export class PublicMarkdownReader {
       body: Buffer.from(content),
       ...(result.fetchedAt ? { fetchedAt: result.fetchedAt } : {}),
       source: result.source,
-      url: `${this.config.apiUrl}/notes/${encodeURIComponent(noteId)}`,
+      url: `${this.config.apiUrl}${path}`,
     };
   }
 

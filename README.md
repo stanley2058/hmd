@@ -103,7 +103,13 @@ hmd note delete URL
 
 `note list` only reads the personal workspace or the team explicitly selected with `--team`; it never scans every team. `note resolve` normalizes an ID or URL without making a network request. `note diff` exits with status 0 when the content matches and 1 when it differs.
 
-`note update` checks the free public Markdown representation before sending content. If the content is unchanged, it skips the API write. Private notes are updated directly, without a charged preflight GET. Use `--force` to skip the public comparison.
+`note view`, `note cat`, `note diff`, `note update` (`edit`), and `note delete` (`rm`) pass complete named URLs to the API for server-side resolution. Each uncached API operation makes one request, with no team or note-list lookups. Keep the complete URL, including its namespace; a custom permalink alone is insufficient. The default `/notes` route handles personal and accessible team notes and uses personal API quota. Pass `--team <path>` to use the team endpoint and team quota instead. Public reads still run first unless `--api always` is set; `--api never` makes no API request. `note resolve` remains local.
+
+```bash
+hmd note view https://hackmd.io/@hackmd-design/bottom-discussion --team hackmd-design
+```
+
+`note update` checks the free public Markdown representation before sending content. If content is the only update and it is unchanged, it skips the API write. A failed public read proceeds directly to the API write. The API resolves named URLs within the write request. Use `--force` to skip the public comparison.
 
 ### Zero-quota public reads
 
@@ -160,7 +166,20 @@ The npm package includes a compact agent skill at `skills/hmd/SKILL.md`.
 
 ## Publishing
 
-Pushing a tag such as `v0.1.1` runs the npm publishing workflow. The tag must match the version in `package.json`. The first publish requires a write-capable npm token in the `NPM_TOKEN` repository secret; later releases can use npm trusted publishing configured for `.github/workflows/publish.yml`.
+Publish locally after authenticating with npm:
+
+```bash
+npm publish --access public
+```
+
+The publish hooks run the checks and rebuild the CLI. To publish through GitHub Actions instead, push a tag matching `package.json`:
+
+```bash
+git tag v0.1.2
+git push origin main refs/tags/v0.1.2
+```
+
+Pushing a tag such as `v0.1.2` runs the npm publishing workflow. The tag must match the version in `package.json`. The first publish requires a write-capable npm token in the `NPM_TOKEN` repository secret; later releases can use npm trusted publishing configured for `.github/workflows/publish.yml`.
 
 ## License
 

@@ -96,6 +96,57 @@ describe("PublicMarkdownReader", () => {
     }
   });
 
+  for (const policy of ["auto", "always", "never"] as const) {
+    for (const team of [undefined, "design"]) {
+      test(`reads a named URL directly with policy ${policy} and team ${team}`, async () => {
+        const root = await mkdtemp(join(tmpdir(), "hmd-direct-test-"));
+        roots.push(root);
+        const config = testConfig({ cacheDir: root });
+        const paths: string[] = [];
+        let publicCalls = 0;
+        const fetcher = (async () => {
+          publicCalls += 1;
+          return new Response("private", { status: 403 });
+        }) as unknown as typeof fetch;
+        const api = {
+          request: async (_method: string, path: string) => {
+            paths.push(path);
+            return {
+              attempts: [
+                {
+                  method: "GET",
+                  result: "response",
+                  source: "api",
+                  status: 200,
+                  url: `${config.apiUrl}${path}`,
+                },
+              ],
+              body: Buffer.from(JSON.stringify({ id: "canonical-id", content: "# Private" })),
+              headers: new Headers(),
+              source: "api",
+              status: 200,
+            };
+          },
+        } as unknown as ApiExecutor;
+        const reader = new PublicMarkdownReader(config, new SharedCache(root), api, fetcher);
+        const url = "https://example.test/@design/discussion";
+        const read = reader.read(url, { api: policy, cacheMs: 300_000, ...(team ? { team } : {}) });
+        if (policy === "never") {
+          await expect(read).rejects.toThrow("not publicly readable");
+          expect(paths).toEqual([]);
+        } else {
+          const result = await read;
+          const path = `${team ? "/teams/design/notes" : "/notes"}/${encodeURIComponent(url)}`;
+          expect(paths).toEqual([path]);
+          expect(Buffer.from(result.body).toString()).toBe("# Private");
+          expect(result.url).toBe(`${config.apiUrl}${path}`);
+          expect(result.attempts.filter((attempt) => attempt.source === "api")).toHaveLength(1);
+        }
+        expect(publicCalls).toBe(policy === "always" ? 0 : 1);
+      });
+    }
+  }
+
   test("rejects HTML success responses from free-URL handling", async () => {
     const root = await mkdtemp(join(tmpdir(), "hmd-public-test-"));
     roots.push(root);
